@@ -24,6 +24,9 @@ func TestParseShorthandValid(t *testing.T) {
 		{"surrounding whitespace", " 10 / s ", RateLimit{10, time.Second}},
 		{"plural seconds", "10/seconds", RateLimit{10, time.Second}},
 		{"hour abbreviation", "5/hr", RateLimit{5, time.Hour}},
+		{"compound hour and minutes", "10/1h30m", RateLimit{10, time.Hour + 30*time.Minute}},
+		{"compound day and hours", "1/1d12h", RateLimit{1, 36 * time.Hour}},
+		{"compound with multi-digit minutes", "5/2h45min", RateLimit{5, 2*time.Hour + 45*time.Minute}},
 	}
 
 	for _, tc := range cases {
@@ -55,6 +58,8 @@ func TestParseShorthandInvalid(t *testing.T) {
 		{"too many slashes", "10/5/s"},
 		{"empty string", ""},
 		{"only a slash", "/"},
+		{"trailing multiplier with no unit", "10/1h30"},
+		{"compound with unknown second unit", "10/1h30fortnight"},
 	}
 
 	for _, tc := range cases {
@@ -92,6 +97,32 @@ func TestRateLimitStringRoundTrip(t *testing.T) {
 			}
 			if reparsed != tc.in {
 				t.Fatalf("round trip mismatch: got %+v, want %+v", reparsed, tc.in)
+			}
+		})
+	}
+}
+
+// Compound windows like "1h30m" don't have a canonical single-unit
+// shorthand of their own, so String() renders them in whichever unit
+// divides evenly (here, minutes) rather than reproducing "1h30m". The
+// round trip is checked by value, not by exact string.
+func TestParseShorthandCompoundRoundTrip(t *testing.T) {
+	cases := []string{"10/1h30m", "1/1d12h", "5/2h45min"}
+
+	for _, in := range cases {
+		t.Run(in, func(t *testing.T) {
+			rl, err := ParseShorthand(in)
+			if err != nil {
+				t.Fatalf("ParseShorthand(%q) returned error: %v", in, err)
+			}
+
+			rendered := rl.String()
+			reparsed, err := ParseShorthand(rendered)
+			if err != nil {
+				t.Fatalf("re-parsing %q (rendered from %q) failed: %v", rendered, in, err)
+			}
+			if reparsed != rl {
+				t.Fatalf("round trip mismatch: got %+v, want %+v", reparsed, rl)
 			}
 		})
 	}

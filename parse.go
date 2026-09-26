@@ -52,9 +52,10 @@ var canonicalUnits = []unitSpec{
 
 // ParseShorthand parses a compact rate expression such as "100/min" or
 // "50/10s" into a RateLimit. The count must be a positive integer; the
-// period is an optional positive integer multiplier followed by a unit
-// (s, sec, min, hr, day, ms, or their plurals). Whitespace around either
-// half is ignored and units are matched case-insensitively.
+// period is one or more (optional integer multiplier, unit) segments
+// back to back, e.g. "min", "10s", or "1h30m" (s, sec, min, hr, day, ms,
+// or their plurals). Whitespace around either half is ignored and units
+// are matched case-insensitively.
 func ParseShorthand(s string) (RateLimit, error) {
 	parts := strings.Split(s, "/")
 	if len(parts) != 2 {
@@ -80,37 +81,52 @@ func ParseShorthand(s string) (RateLimit, error) {
 	return RateLimit{Count: count, Window: window}, nil
 }
 
-// parsePeriod parses the part of a shorthand string after the slash,
-// e.g. "s", "min", or "10s".
+// parsePeriod parses the part of a shorthand string after the slash. It
+// accepts one segment, e.g. "s" or "10s", or several run together, e.g.
+// "1h30m", summing each (multiplier, unit) pair it finds.
 func parsePeriod(s string) (time.Duration, error) {
 	if s == "" {
 		return 0, fmt.Errorf("period is empty")
 	}
 
+	var total time.Duration
 	i := 0
-	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
-		i++
-	}
-
-	mult := 1
-	if i > 0 {
-		n, err := strconv.Atoi(s[:i])
-		if err != nil {
-			return 0, err
+	for i < len(s) {
+		digitsStart := i
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
 		}
-		mult = n
-	}
-	if mult <= 0 {
-		return 0, fmt.Errorf("period multiplier must be positive")
+
+		mult := 1
+		if i > digitsStart {
+			n, err := strconv.Atoi(s[digitsStart:i])
+			if err != nil {
+				return 0, err
+			}
+			mult = n
+		}
+		if mult <= 0 {
+			return 0, fmt.Errorf("period multiplier must be positive")
+		}
+
+		unitStart := i
+		for i < len(s) && !(s[i] >= '0' && s[i] <= '9') {
+			i++
+		}
+		if i == unitStart {
+			return 0, fmt.Errorf("no unit follows the multiplier in %q", s)
+		}
+
+		unitStr := strings.ToLower(s[unitStart:i])
+		base, ok := units[unitStr]
+		if !ok {
+			return 0, fmt.Errorf("unrecognized unit %q", s[unitStart:i])
+		}
+
+		total += time.Duration(mult) * base
 	}
 
-	unitStr := strings.ToLower(s[i:])
-	base, ok := units[unitStr]
-	if !ok {
-		return 0, fmt.Errorf("unrecognized unit %q", s[i:])
-	}
-
-	return time.Duration(mult) * base, nil
+	return total, nil
 }
 
 // String renders the RateLimit as compact shorthand, choosing the

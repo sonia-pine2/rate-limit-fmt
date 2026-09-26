@@ -10,9 +10,10 @@ handling as an afterthought. This is that conversion, done once.
 `ratefmt` converts between:
 
 - **shorthand**: `<count>/<period>`, e.g. `10/s`, `100/min`, `50/10s`,
-  `1000/day`. Units accept abbreviations, full words, and plurals
-  (`s`/`sec`/`second`/`seconds` are all the same unit), and are matched
-  case-insensitively.
+  `1000/day`, `10/1h30m`. Units accept abbreviations, full words, and
+  plurals (`s`/`sec`/`second`/`seconds` are all the same unit), and are
+  matched case-insensitively. A period can be a single unit or several
+  run together, so `1h30m` and `1d12h` both parse.
 - **JSON**: `{"limit": <int>, "window_seconds": <float>}`.
 
 Both go through a `RateLimit{Count, Window}` value, so if you need a
@@ -73,6 +74,10 @@ type ServiceConfig struct {
   `RateLimit`.
 - A window can have a multiplier: `50/10s` is 50 requests per 10
   seconds, not per second.
+- Periods can be compound: `10/1h30m` is 10 requests per 90 minutes.
+  `String()` doesn't reproduce the compound spelling - it renders
+  whatever single unit divides the window evenly, so `1h30m` comes back
+  out as `90min` - but it reparses to the same `RateLimit`.
 - Units are case-insensitive: `10/SEC` and `10/sec` are the same.
 - Zero and negative counts, zero-length windows, and unrecognized units
   are all rejected with an error rather than silently coerced.
@@ -84,6 +89,6 @@ against.
 
 ## Status
 
-Early skeleton. The shorthand grammar is intentionally small right now
-(single unit, optional integer multiplier) - see the roadmap in the
-project notes for what's planned next.
+Early skeleton. The shorthand grammar covers single and compound
+periods (`10s`, `1h30m`) with an optional integer multiplier on each
+segment - see the roadmap in the project notes for what's planned next.
