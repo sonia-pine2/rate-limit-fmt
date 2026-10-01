@@ -65,6 +65,22 @@ type ServiceConfig struct {
 }
 ```
 
+## Command line
+
+```
+go install github.com/sonia-pine2/rate-limit-fmt/cmd/ratefmt@latest
+
+$ ratefmt 100/min
+{"limit":100,"window_seconds":60}
+$ ratefmt '{"limit":5,"window_seconds":3600}'
+5/hr
+$ printf '10/s\n50/10s\n' | ratefmt
+```
+
+Input starting with `{` is read as JSON, anything else as shorthand. With
+no arguments it reads one rate limit per line from stdin. Every input is
+converted even if an earlier one fails; the exit code is 1 if any failed.
+
 ## Awkward cases the parser handles on purpose
 
 - `1/m` is one per minute; `1/ms` is one per millisecond. The unit is
